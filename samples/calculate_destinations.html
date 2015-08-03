@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Calculate Destinations</title>
+    <style>
+        html, body, #map-canvas {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        #panel {
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            margin-left: -180px;
+            z-index: 5;
+            background-color: #fff;
+            padding: 5px;
+            border: 1px solid #999;
+        }
+
+        #panel, .panel {
+            font-family: 'Roboto', 'sans-serif';
+            line-height: 30px;
+            padding-left: 10px;
+        }
+
+        #panel select, #panel input, .panel select, .panel input {
+            font-size: 15px;
+        }
+
+        #panel select, .panel select {
+            width: 100%;
+        }
+
+        #panel i, .panel i {
+            font-size: 12px;
+        }
+
+    </style>
+    <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&signed_in=true"></script>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        #map-canvas {
+            height: 100%;
+            width: 50%;
+        }
+
+        #content-pane {
+            float: right;
+            width: 48%;
+            padding-left: 2%;
+        }
+
+        #destinations {
+            border-top: 1px dotted #bbbbbb;
+            margin-top: 11px;
+            font-size: 11px;
+        }
+        
+        #unknown-destinations {
+            border-top: 1px dotted #bbbbbb;
+            margin-top: 11px;
+            font-size: 11px;
+            color: #aaaaaa;
+        }
+    </style>
+    <script>
+        var map;
+        var geocoder;
+        var bounds = new google.maps.LatLngBounds();
+        var markersArray = [];
+
+        var origin = '510 Victoria, Venice, CA, USA';
+        var origins = [origin];
+
+        var destinations = ["Times Square, Manhattan, NY 10036",
+            "13000 S Dakota 244, Keystone, SD 57751",
+            "1600 Pennsylvania Ave NW, Washington, DC 20500",
+            "Golden Gate Bridge, San Francisco, CA 94129",
+            "Stonehenge, A344, Amesbury, Wiltshire SP4 7DE, United Kingdom",
+            "Great Wall of China",
+            "Hollywood Sign, Los Angeles, CA"];
+
+        var destinationIcon = 'https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=D|FF0000|000000';
+        var originIcon = 'https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=O|FFFF00|000000';
+
+        function initialize() {
+            var opts = {
+                center: new google.maps.LatLng(55.53, 9.4),
+                zoom: 10
+            };
+            map = new google.maps.Map(document.getElementById('map-canvas'), opts);
+            geocoder = new google.maps.Geocoder();
+        }
+
+        function calculateDistances() {
+            var service = new google.maps.DistanceMatrixService();
+            service.getDistanceMatrix({
+                        origins: origins,
+                        destinations: destinations,
+                        travelMode: google.maps.TravelMode.DRIVING,
+                        unitSystem: google.maps.UnitSystem.METRIC,
+                        avoidHighways: false,
+                        avoidTolls: false
+                    }, callback);
+            
+            document.getElementById('calculate-button').disabled = true;
+        }
+
+        function callback(response, status) {
+            if (status != google.maps.DistanceMatrixStatus.OK) {
+                alert('Error was: ' + status);
+            } else {
+                var origins = response.originAddresses;
+                var destinations = response.destinationAddresses;
+                var destinationsDiv = document.getElementById('destinations');
+                var unknownDestinationsDiv = document.getElementById('unknown-destinations');
+                var officeDiv = document.getElementById('office-location');
+                destinationsDiv.innerHTML = '';
+                deleteOverlays();
+
+                var compare = function (a, b) {
+                    if (a.distance && b.distance) {
+                        return a.distance.value - b.distance.value;
+                    } else if ((!a.distance && b.distance) || (!b.distance && a.distance)) {
+                        return 1;
+                    } else {
+                        return 0;
+                    }
+                }
+
+                for (var i = 0; i < origins.length; i++) {
+                    var results = response.rows[i].elements;
+                    results.forEach(function (item, idx) {
+                        item['destination'] = destinations[idx];
+                        results[idx] = item;
+                    });
+
+                    results.sort(compare);
+                    addMarker(origins[i], false);
+                    officeDiv.innerHTML =  origins[i];
+                    for (var j = 0; j < results.length; j++) {
+                        if (results[j].distance) {
+                            addMarker(destinations[j], true);
+                            destinationsDiv.innerHTML += results[j].destination
+                            + ' (distance = ' + results[j].distance.text + ', duration = '
+                            + results[j].duration.text + ')<br>';
+                        } else {
+                            addMarker(destinations[j], true);
+                            unknownDestinationsDiv.innerHTML += results[j].destination
+                            + '- Could not determine distance nor duration based on the supported transportation mode.<br>';
+                        }
+                    }
+                }
+            }
+        }
+
+        function addMarker(location, isDestination) {
+            var icon;
+            if (isDestination) {
+                icon = destinationIcon;
+            } else {
+                icon = originIcon;
+            }
+            geocoder.geocode({'address': location}, function (results, status) {
+                if (status == google.maps.GeocoderStatus.OK) {
+                    bounds.extend(results[0].geometry.location);
+                    map.fitBounds(bounds);
+                    var marker = new google.maps.Marker({
+                        map: map,
+                        position: results[0].geometry.location,
+                        icon: icon
+                    });
+                    markersArray.push(marker);
+                } else {
+                    alert('Geocode was not successful for the following reason: '
+                    + status);
+                }
+            });
+        }
+
+        function deleteOverlays() {
+            for (var i = 0; i < markersArray.length; i++) {
+                markersArray[i].setMap(null);
+            }
+            markersArray = [];
+        }
+
+        google.maps.event.addDomListener(window, 'load', initialize);
+
+    </script>
+</head>
+<body>
+<div id="content-pane" class="panel">
+    <div id="inputs">
+        <p>
+            <button id="calculate-button" type="button" onclick="calculateDistances();">Calculate
+                distances
+            </button>
+        </p>
+    </div>
+    Office Location: <div id="office-location"></div>
+    <div id="destinations"></div>
+    <div id="unknown-destinations"></div>
+</div>
+<div id="map-canvas"></div>
+</body>
+</html>
